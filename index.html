@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moon Tracking System — Mersing, Johor</title>
+<style>
+/* ─── RESET & BASE ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #080c14;
+  --bg2: #0d1321;
+  --bg3: #111827;
+  --card: #131c2e;
+  --card2: #1a2540;
+  --border: #1e2d47;
+  --border2: #263450;
+  --text: #e2e8f0;
+  --muted: #7a8ba8;
+  --accent: #3b82f6;
+  --accent2: #60a5fa;
+  --gold: #f59e0b;
+  --gold2: #fcd34d;
+  --green: #10b981;
+  --red: #ef4444;
+  --purple: #8b5cf6;
+  --cyan: #06b6d4;
+  --phase-glow: rgba(59,130,246,0.15);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+/* ─── STARFIELD BACKGROUND ─── */
+#starfield {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+/* ─── LAYOUT ─── */
+.app-wrapper {
+  position: relative; z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 16px 40px;
+}
+/* ─── TOP BAR ─── */
+.topbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px;
+  padding: 16px 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.topbar-title {
+  display: flex; align-items: center; gap: 10px;
+  flex: 1 1 200px;
+}
+.topbar-title .moon-icon { font-size: 28px; }
+.topbar-title h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.03em; color: var(--text); }
+.topbar-title h1 span { color: var(--accent2); }
+.topbar-clock {
+  text-align: center; flex: 1 1 160px;
+}
+.clock-time { font-size: 22px; font-weight: 700; color: var(--gold2); font-variant-numeric: tabular-nums; }
+.clock-date { font-size: 12px; color: var(--muted); }
+.topbar-right {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  flex: 1 1 280px; justify-content: flex-end;
+}
+.status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%,100%{ opacity:1; } 50%{ opacity:0.4; }
+}
+.status-label { font-size: 12px; color: var(--green); }
+.location-selector {
+  background: var(--card2); border: 1px solid var(--border2);
+  color: var(--text); padding: 6px 10px; border-radius: var(--radius-sm);
+  font-size: 13px; cursor: pointer; outline: none;
+  transition: border-color 0.2s;
+}
+.location-selector:hover { border-color: var(--accent); }
+.btn-gps {
+  background: var(--card2); border: 1px solid var(--border2);
+  color: var(--accent2); padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: 12px; cursor: pointer; transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-gps:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.coords-display { font-size: 11px; color: var(--muted); }
+/* ─── GRID LAYOUT ─── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  grid-template-rows: auto auto;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .main-grid { grid-template-columns: 1fr; }
+}
+/* ─── CARDS ─── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at top left, rgba(59,130,246,0.04), transparent 60%);
+  pointer-events: none;
+}
+.card-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 14px; display: flex; align-items: center; gap: 6px;
+}
+.card-title::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+/* ─── MOON TRACKER PANEL (left) ─── */
+.tracker-panel {
+  grid-row: 1 / 3;
+  display: flex; flex-direction: column; gap: 14px;
+}
+/* Moon Phase Canvas */
+.phase-canvas-wrap {
+  text-align: center; padding: 10px 0;
+}
+#moonCanvas {
+  border-radius: 50%;
+  box-shadow: 0 0 40px rgba(59,130,246,0.2), 0 0 80px rgba(59,130,246,0.08);
+  cursor: default;
+  transition: box-shadow 0.5s;
+}
+.phase-name {
+  margin-top: 10px; font-size: 18px; font-weight: 700; color: var(--gold2);
+}
+.phase-illumination {
+  font-size: 13px; color: var(--muted); margin-top: 2px;
+}
+/* Real-time stats */
+.stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.stat-item {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.stat-value { font-size: 16px; font-weight: 700; color: var(--text); margin-top: 2px; }
+.stat-unit { font-size: 10px; color: var(--muted); }
+/* Visibility badge */
+.visibility-badge {
+  text-align: center; padding: 10px 16px; border-radius: var(--radius-sm);
+  font-weight: 700; font-size: 14px; letter-spacing: 0.05em;
+  border: 1px solid;
+}
+.vis-above { background: rgba(16,185,129,0.12); color: var(--green); border-color: rgba(16,185,129,0.3); }
+.vis-easy  { background: rgba(16,185,129,0.18); color: #34d399; border-color: rgba(16,185,129,0.4); }
+.vis-difficult { background: rgba(245,158,11,0.12); color: var(--gold); border-color: rgba(245,158,11,0.3); }
+.vis-below { background: rgba(239,68,68,0.1); color: var(--red); border-color: rgba(239,68,68,0.25); }
+/* Compass */
+.compass-wrap {
+  display: flex; justify-content: center; align-items: center; padding: 8px 0;
+}
+#compassCanvas { cursor: default; }
+/* Next phase */
+.next-phase-row {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+.next-phase-label { font-size: 11px; color: var(--muted); }
+.next-phase-val { font-size: 13px; font-weight: 600; color: var(--gold2); }
+/* Countdowns */
+.countdown-row {
+  display: flex; gap: 8px;
+}
+.countdown-box {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 8px; text-align: center;
+}
+.countdown-box .lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.countdown-box .val { font-size: 14px; font-weight: 700; color: var(--accent2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+/* ─── RIGHT COLUMN ─── */
+.right-col {
+  display: flex; flex-direction: column; gap: 16px;
+}
+/* Sky Map */
+#skyMapCanvas { display: block; width: 100%; border-radius: var(--radius-sm); }
+/* Altitude chart */
+#altChart { display: block; width: 100%; border-radius: var(--radius-sm); }
+/* ─── CALENDAR SECTION ─── */
+.calendar-section {
+  grid-column: 1 / -1;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.month-nav {
+  display: flex; align-items: center; gap: 12px;
+}
+.month-nav-title {
+  font-size: 18px; font-weight: 700; color: var(--text); flex: 1;
+}
+.btn-month {
+  background: var(--card2); border: 1px solid var(--border2);
+  color: var(--text); width: 32px; height: 32px; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.btn-month:hover { background: var(--accent); border-color: var(--accent); }
+.cal-export-btns { display: flex; gap: 8px; margin-left: auto; }
+.btn-export {
+  background: var(--card2); border: 1px solid var(--border2);
+  color: var(--muted); padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: 12px; cursor: pointer; transition: all 0.2s;
+}
+.btn-export:hover { color: var(--text); border-color: var(--accent); }
+/* Calendar grid */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cal-header {
+  text-align: center; font-size: 11px; font-weight: 700;
+  color: var(--muted); padding: 6px 0; letter-spacing: 0.06em;
+}
+.cal-day {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 6px;
+  cursor: pointer; transition: all 0.2s; min-height: 80px;
+  display: flex; flex-direction: column; gap: 3px;
+  position: relative;
+}
+.cal-day:hover { border-color: var(--accent2); background: var(--bg3); }
+.cal-day.selected { border-color: var(--accent); background: rgba(59,130,246,0.1); }
+.cal-day.today { border-color: var(--gold); }
+.cal-day.empty { background: transparent; border-color: transparent; cursor: default; }
+.cal-day-num {
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.cal-day.today .cal-day-num { color: var(--gold2); }
+.cal-phase-icon {
+  font-size: 18px; line-height: 1; text-align: center;
+}
+.cal-illum {
+  font-size: 9px; color: var(--muted); text-align: center;
+}
+.cal-vis-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  position: absolute; top: 6px; right: 6px;
+}
+/* Detail Panel */
+.detail-panel {
+  background: var(--card); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 20px;
+  display: none;
+}
+.detail-panel.open { display: block; }
+.detail-header {
+  display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.detail-moon-img {
+  width: 100px; height: 100px; border-radius: 50%;
+  box-shadow: 0 0 20px rgba(59,130,246,0.3);
+  flex-shrink: 0;
+}
+.detail-info-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr));
+  gap: 10px; flex: 1;
+}
+.detail-stat {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+}
+.detail-stat .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.detail-stat .val { font-size: 15px; font-weight: 700; color: var(--text); }
+.detail-notes {
+  background: var(--bg3); border-left: 3px solid var(--accent);
+  padding: 10px 14px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12px; color: var(--muted); margin-top: 12px; line-height: 1.7;
+}
+/* Horizon Chart */
+#horizonCanvas { display: block; width: 100%; }
+/* Phase Timeline */
+#timelineCanvas { display: block; width: 100%; }
+/* Best time banner */
+.best-time-banner {
+  background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(59,130,246,0.08));
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius); padding: 14px 18px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.best-time-banner .icon { font-size: 24px; }
+.best-time-banner .title { font-size: 13px; font-weight: 700; color: var(--gold2); }
+.best-time-banner .subtitle { font-size: 12px; color: var(--muted); }
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+/* Responsive */
+@media (max-width: 680px) {
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+  .main-grid { gap: 12px; }
+  .cal-day { min-height: 60px; }
+  .cal-phase-icon { font-size: 14px; }
+  .topbar-title h1 { font-size: 16px; }
+}
+/* Tooltip */
+.tooltip {
+  position: fixed; background: var(--card2); border: 1px solid var(--border2);
+  padding: 6px 10px; border-radius: 6px; font-size: 12px; color: var(--text);
+  pointer-events: none; z-index: 9999; display: none; max-width: 200px;
+}
+/* Loading spinner */
+.spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid var(--border2); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Zodiac tag */
+.zodiac-tag {
+  display: inline-block; background: rgba(139,92,246,0.15);
+  color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);
+  padding: 2px 8px; border-radius: 20px; font-size: 11px;
+}
+/* altitude bar */
+.alt-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.alt-bar-bg { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.alt-bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+</style>
+</head>
+<body>
+<canvas id="starfield"></canvas>
+<div class="tooltip" id="tooltip"></div>
+
+<div class="app-wrapper">
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-title">
+      <span class="moon-icon">🌙</span>
+      <h1>Moon <span>Tracking</span> System</h1>
+    </div>
+    <div class="topbar-clock">
+      <div class="clock-time" id="clockTime">--:--:--</div>
+      <div class="clock-date" id="clockDate">Loading...</div>
+    </div>
+    <div class="topbar-right">
+      <span class="status-dot"></span>
+      <span class="status-label">LIVE</span>
+      <select class="location-selector" id="locationSelect" onchange="onLocationChange()">
+        <option value="mersing">📍 Mersing, Johor, Malaysia</option>
+        <option value="gps">📡 Current Device Location</option>
+      </select>
+      <button class="btn-gps" onclick="getGPS()">🛰 Use GPS</button>
+      <div class="coords-display" id="coordsDisplay">2.4312°N · 103.8360°E · UTC+8</div>
+    </div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- LEFT: TRACKER PANEL -->
+    <div class="tracker-panel">
+
+      <!-- Real-time Moon card -->
+      <div class="card">
+        <div class="card-title">🌕 Current Moon</div>
+        <div class="phase-canvas-wrap">
+          <canvas id="moonCanvas" width="180" height="180"></canvas>
+          <div class="phase-name" id="phaseName">Loading...</div>
+          <div class="phase-illumination" id="phaseIllum">Illumination: --</div>
+          <div style="margin-top:6px"><span class="zodiac-tag" id="zodiacTag">♓ Pisces</span></div>
+        </div>
+        <!-- Altitude bar -->
+        <div style="margin:8px 0 4px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+            <span>Altitude</span><span id="altBarLabel">--°</span>
+          </div>
+          <div class="alt-bar-wrap">
+            <div class="alt-bar-bg">
+              <div class="alt-bar-fill" id="altBarFill" style="width:0%;background:var(--accent)"></div>
+            </div>
+          </div>
+        </div>
+        <div class="visibility-badge vis-below" id="visibilityBadge">Loading...</div>
+      </div>
+
+      <!-- Stats grid card -->
+      <div class="card">
+        <div class="card-title">📊 Live Data</div>
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-label">Azimuth</div>
+            <div class="stat-value" id="statAz">--<span class="stat-unit">°</span></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Altitude</div>
+            <div class="stat-value" id="statAlt">--<span class="stat-unit">°</span></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Moonrise</div>
+            <div class="stat-value" id="statRise" style="font-size:13px">--:--</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Moonset</div>
+            <div class="stat-value" id="statSet" style="font-size:13px">--:--</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Distance</div>
+            <div class="stat-value" id="statDist" style="font-size:13px">-- <span class="stat-unit">km</span></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Moon Age</div>
+            <div class="stat-value" id="statAge" style="font-size:13px">-- <span class="stat-unit">days</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compass card -->
+      <div class="card">
+        <div class="card-title">🧭 Azimuth Compass</div>
+        <div class="compass-wrap">
+          <canvas id="compassCanvas" width="200" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- Next phase & countdowns -->
+      <div class="card">
+        <div class="card-title">⏱ Phase Transitions</div>
+        <div class="next-phase-row" style="margin-bottom:8px">
+          <div>
+            <div class="next-phase-label">Next Phase</div>
+            <div class="next-phase-val" id="nextPhaseName">--</div>
+          </div>
+          <div style="text-align:right">
+            <div class="next-phase-label">Date</div>
+            <div class="next-phase-val" id="nextPhaseDate">--</div>
+          </div>
+        </div>
+        <div class="countdown-row">
+          <div class="countdown-box">
+            <div class="lbl">🌕 Full Moon In</div>
+            <div class="val" id="cdFull">--d --h</div>
+          </div>
+          <div class="countdown-box">
+            <div class="lbl">🌑 New Moon In</div>
+            <div class="val" id="cdNew">--d --h</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /tracker-panel -->
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+      <!-- Best time banner -->
+      <div class="best-time-banner">
+        <span class="icon">⭐</span>
+        <div>
+          <div class="title" id="bestTimeTitle">Best Time to Observe Tonight</div>
+          <div class="subtitle" id="bestTimeSub">Calculating optimal observation window...</div>
+        </div>
+      </div>
+
+      <!-- Sky Map -->
+      <div class="card">
+        <div class="card-title">🌌 Sky Map — Moon Position</div>
+        <canvas id="skyMapCanvas" width="800" height="240"></canvas>
+      </div>
+
+      <!-- Altitude / Horizon Chart -->
+      <div class="card">
+        <div class="card-title">📈 24h Altitude Profile</div>
+        <canvas id="horizonCanvas" width="800" height="180"></canvas>
+      </div>
+
+      <!-- Monthly Phase Timeline -->
+      <div class="card">
+        <div class="card-title">🗓 Monthly Phase Timeline</div>
+        <canvas id="timelineCanvas" width="800" height="80"></canvas>
+      </div>
+
+    </div><!-- /right-col -->
+
+    <!-- CALENDAR SECTION -->
+    <div class="calendar-section">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="btn-month" id="btnPrevMonth" onclick="changeMonth(-1)">‹</button>
+          <div class="month-nav-title" id="calMonthTitle">October 2026</div>
+          <button class="btn-month" id="btnNextMonth" onclick="changeMonth(1)">›</button>
+          <div class="cal-export-btns">
+            <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+            <button class="btn-export" onclick="exportPDF()">⬇ Export PDF</button>
+          </div>
+        </div>
+        <!-- Day headers -->
+        <div class="calendar-grid" id="calGrid">
+          <!-- filled by JS -->
+        </div>
+      </div>
+
+      <!-- Detail Panel -->
+      <div class="detail-panel" id="detailPanel">
+        <div class="card-title" style="font-size:14px;color:var(--accent2)" id="detailTitle">Selected Date Details</div>
+        <div class="detail-header">
+          <canvas id="detailMoonCanvas" width="100" height="100" class="detail-moon-img"></canvas>
+          <div class="detail-info-grid" id="detailInfoGrid">
+            <!-- filled by JS -->
+          </div>
+        </div>
+        <div class="detail-notes" id="detailNotes"></div>
+      </div>
+
+    </div><!-- /calendar-section -->
+
+  </div><!-- /main-grid -->
+</div><!-- /app-wrapper -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  ASTRONOMICAL CONSTANTS & HELPERS
+// ═══════════════════════════════════════════════════════════════
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
+
+function toRad(d){ return d * DEG; }
+function toDeg(r){ return r * RAD; }
+function norm(v){ return v - Math.floor(v/360)*360; }
+function norm360(v){ v=v%360; return v<0?v+360:v; }
+function frac(v){ return v-Math.floor(v); }
+
+// Julian Day
+function JD(date){
+  let Y=date.getUTCFullYear(), M=date.getUTCMonth()+1, D=date.getUTCDate();
+  let h=date.getUTCHours(), m=date.getUTCMinutes(), s=date.getUTCSeconds();
+  let Dfrac = D + h/24 + m/1440 + s/86400;
+  if(M<=2){ Y--; M+=12; }
+  let A=Math.floor(Y/100), B=2-A+Math.floor(A/4);
+  return Math.floor(365.25*(Y+4716)) + Math.floor(30.6001*(M+1)) + Dfrac + B - 1524.5;
+}
+
+function JDtoDate(jd){
+  let Z=Math.floor(jd+0.5), F=jd+0.5-Z;
+  let A=Z; if(Z>=2299161){ let a=Math.floor((Z-1867216.25)/36524.25); A=Z+1+a-Math.floor(a/4); }
+  let B=A+1524, C=Math.floor((B-122.1)/365.25), D=Math.floor(365.25*C);
+  let E=Math.floor((B-D)/30.6001);
+  let day=B-D-Math.floor(30.6001*E)+F;
+  let mo=E<14?E-1:E-13, yr=mo>2?C-4716:C-4715;
+  let d=Math.floor(day), h=(day-d)*24;
+  return new Date(Date.UTC(yr,mo-1,d,Math.floor(h),Math.floor((h%1)*60),Math.floor(((h%1)*60%1)*60)));
+}
+
+// ─── MOON POSITION (Meeus, Astronomical Algorithms, Ch 47) ───
+function moonPosition(date){
+  let jd = JD(date);
+  let T = (jd - 2451545.0) / 36525;
+  // Fundamental arguments
+  let L0 = norm360(218.3164477 + 481267.88123421*T - 0.0015786*T*T + T*T*T/538841 - T*T*T*T/65194000);
+  let D  = norm360(297.8501921 + 445267.1114034*T - 0.0018819*T*T + T*T*T/545868 - T*T*T*T/113065000);
+  let M  = norm360(357.5291092 + 35999.0502909*T - 0.0001536*T*T + T*T*T/24490000);
+  let Mp = norm360(134.9633964 + 477198.8675055*T + 0.0087414*T*T + T*T*T/69699 - T*T*T*T/14712000);
+  let F  = norm360(93.2720950  + 483202.0175233*T - 0.0036539*T*T - T*T*T/3526000 + T*T*T*T/863310000);
+  let A1 = norm360(119.75 + 131.849*T);
+  let A2 = norm360(53.09 + 479264.290*T);
+  let A3 = norm360(313.45 + 481266.484*T);
+  let E  = 1 - 0.002516*T - 0.0000074*T*T;
+
+  let SumL=0, SumR=0, SumB=0;
+  // Longitude & Distance terms (major only, ~50 terms)
+  const lrT=[
+    [0,0,1,0,6288774,-20905355],[2,0,-1,0,1274027,-3699111],[2,0,0,0,658314,-2955968],
+    [0,0,2,0,213618,-569925],[0,1,0,0,-185116,48888],[0,0,0,2,-114332,-3149],
+    [2,0,-2,0,58793,246158],[2,-1,-1,0,57066,-152138],[2,0,1,0,53322,-170733],
+    [2,-1,0,0,45758,-204586],[0,1,-1,0,-40923,-129620],[1,0,0,0,-34720,108743],
+    [0,1,1,0,-30383,104755],[2,0,0,-2,15327,10321],[0,0,1,2,-12528,0],
+    [0,0,1,-2,10980,79661],[4,0,-1,0,10675,-34782],[0,0,3,0,10034,-23210],
+    [4,0,-2,0,8548,-21636],[2,1,-1,0,-7888,24208],[2,1,0,0,-6766,30824],
+    [1,0,-1,0,-5163,-8379],[1,1,0,0,4987,-16675],[2,-1,1,0,4036,-12831],
+    [2,0,2,0,3994,-10445],[4,0,0,0,3861,-11650],[2,0,-3,0,3665,14403],
+    [0,1,-2,0,-2689,-7003],[2,0,-1,2,-2602,0],[2,-1,-2,0,2390,10056],
+    [1,0,1,0,-2348,6322],[2,-2,0,0,2236,-9884],[0,1,2,0,-2120,5751],
+    [0,2,0,0,-2069,0],[2,-2,-1,0,2048,-4950],[2,0,1,-2,-1773,4130],
+    [2,0,0,2,-1595,0],[4,-1,-1,0,1215,-3958],[0,0,2,2,-1110,0],
+    [3,0,-1,0,-892,3258],[2,1,1,0,-810,2616],[4,-1,-2,0,759,-1897],
+    [0,2,-1,0,-713,-2117],[2,2,-1,0,-700,2354],[2,1,-2,0,691,0],
+    [2,-1,0,-2,596,0],[4,0,1,0,549,-1423],[0,0,4,0,537,-1117],
+    [4,-1,0,0,520,-1571],[1,0,-2,0,-487,-1739],[2,1,0,-2,-399,0],
+  ];
+  lrT.forEach(([d2,d1,mp,f,cl,cr])=>{
+    let arg=toRad(d2*D+d1*M+mp*Mp+f*F);
+    let ef=(Math.abs(d1)===1)?E:(Math.abs(d1)===2)?E*E:1;
+    SumL+=ef*cl*Math.sin(arg);
+    SumR+=ef*cr*Math.cos(arg);
+  });
+  const bT=[
+    [0,0,0,1,5128122],[0,0,1,1,280602],[0,0,1,-1,277693],[2,0,0,-1,173237],
+    [2,0,-1,1,55413],[2,0,-1,-1,46271],[2,0,0,1,32573],[0,0,2,1,17198],
+    [2,0,1,-1,9266],[0,0,2,-1,8822],[2,-1,0,-1,8216],[2,0,-2,-1,4324],
+    [2,0,1,1,4200],[2,1,0,-1,-3359],[2,-1,-1,1,2463],[2,-1,0,1,2211],
+    [2,-1,-1,-1,2065],[0,1,-1,-1,-1870],[4,0,-1,-1,1828],[0,1,0,1,-1794],
+    [0,0,0,3,-1749],[0,1,-1,1,-1565],[1,0,0,1,-1491],[0,1,1,1,-1475],
+    [0,1,1,-1,-1410],[0,1,0,-1,-1344],[1,0,0,-1,-1335],[0,0,3,1,1107],
+    [4,0,0,-1,1021],[4,0,-1,1,833],
+  ];
+  bT.forEach(([d2,d1,mp,f,cb])=>{
+    let arg=toRad(d2*D+d1*M+mp*Mp+f*F);
+    let ef=(Math.abs(d1)===1)?E:(Math.abs(d1)===2)?E*E:1;
+    SumB+=ef*cb*Math.sin(arg);
+  });
+  SumL += 3958*Math.sin(toRad(A1)) + 1962*Math.sin(toRad(L0-F)) + 318*Math.sin(toRad(A2));
+  SumB += -2235*Math.sin(toRad(L0)) + 382*Math.sin(toRad(A3)) + 175*Math.sin(toRad(A1-F))
+         + 175*Math.sin(toRad(A1+F)) + 127*Math.sin(toRad(L0-Mp)) - 115*Math.sin(toRad(L0+Mp));
+
+  let lambda = L0 + SumL/1000000; // ecliptic longitude
+  let beta   = SumB/1000000;       // ecliptic latitude
+  let Delta  = 385000.56 + SumR/1000; // distance km
+
+  // Convert ecliptic to equatorial
+  let eps = 23.4393 - 0.0130042*T;
+  let ra  = toDeg(Math.atan2(Math.sin(toRad(lambda))*Math.cos(toRad(eps)) - Math.tan(toRad(beta))*Math.sin(toRad(eps)), Math.cos(toRad(lambda))));
+  let dec = toDeg(Math.asin(Math.sin(toRad(beta))*Math.cos(toRad(eps)) + Math.cos(toRad(beta))*Math.sin(toRad(eps))*Math.sin(toRad(lambda))));
+  ra = norm360(ra);
+
+  return { lambda, beta, delta: Delta, ra, dec, T, jd, D, M, Mp, F, L0 };
+}
+
+// ─── MOON ALTITUDE & AZIMUTH from observer ───
+function moonAltAz(date, lat, lon){
+  let pos = moonPosition(date);
+  let jd = pos.jd;
+  // Greenwich Mean Sidereal Time
+  let T = pos.T;
+  let theta0 = 280.46061837 + 360.98564736629*(jd-2451545) + 0.000387933*T*T - T*T*T/38710000;
+  theta0 = norm360(theta0);
+  let LST = norm360(theta0 + lon);
+  let H = norm360(LST - pos.ra); // Hour angle
+  if(H>180) H-=360;
+
+  let latR=toRad(lat), decR=toRad(pos.dec), HR=toRad(H);
+  let sinAlt = Math.sin(latR)*Math.sin(decR)+Math.cos(latR)*Math.cos(decR)*Math.cos(HR);
+  let alt = toDeg(Math.asin(sinAlt));
+  let cosAz = (Math.sin(decR)-Math.sin(latR)*sinAlt)/(Math.cos(latR)*Math.cos(toRad(alt)));
+  cosAz = Math.max(-1,Math.min(1,cosAz));
+  let az = toDeg(Math.acos(cosAz));
+  if(Math.sin(HR)>0) az=360-az;
+
+  // Illumination
+  let elongation = toDeg(Math.acos(Math.cos(toRad(pos.beta))*Math.cos(toRad(pos.lambda-sunLongitude(date)))));
+  let illum = (1 - Math.cos(toRad(elongation)))/2 * 100;
+
+  // Moon age (days since new moon)
+  let age = moonAge(date);
+
+  return { alt, az, delta: pos.delta, ra: pos.ra, dec: pos.dec, illum, age, lambda: pos.lambda, beta: pos.beta, pos };
+}
+
+function sunLongitude(date){
+  let T=(JD(date)-2451545)/36525;
+  let L0=norm360(280.46646+36000.76983*T+0.0003032*T*T);
+  let M=norm360(357.52911+35999.05029*T-0.0001537*T*T);
+  let C=(1.914602-0.004817*T-0.000014*T*T)*Math.sin(toRad(M))
+       +(0.019993-0.000101*T)*Math.sin(toRad(2*M))
+       +0.000289*Math.sin(toRad(3*M));
+  return norm360(L0+C);
+}
+
+function moonAge(date){
+  // Days since last new moon
+  let jd=JD(date);
+  let k0=(jd-2451550.09766)/29.530588861;
+  k0=Math.floor(k0);
+  let T=k0/1236.85;
+  let JDE=2451550.09766+29.530588861*k0+0.00015437*T*T-0.000000150*T*T*T+0.00000000073*T*T*T*T;
+  let age=jd-JDE;
+  if(age<0) age+=29.530588861;
+  return age;
+}
+
+function moonPhase(age){
+  if(age<1.85)         return {name:'New Moon',       icon:'🌑', val:0};
+  if(age<5.54)         return {name:'Waxing Crescent', icon:'🌒', val:1};
+  if(age<9.22)         return {name:'First Quarter',   icon:'🌓', val:2};
+  if(age<12.91)        return {name:'Waxing Gibbous',  icon:'🌔', val:3};
+  if(age<16.61)        return {name:'Full Moon',       icon:'🌕', val:4};
+  if(age<20.30)        return {name:'Waning Gibbous',  icon:'🌖', val:5};
+  if(age<23.99)        return {name:'Last Quarter',    icon:'🌗', val:6};
+  if(age<27.68)        return {name:'Waning Crescent', icon:'🌘', val:7};
+  return               {name:'New Moon',               icon:'🌑', val:0};
+}
+
+function zodiacConstellation(lambda){
+  const z=[
+    [0,30,'Aries ♈'],[30,60,'Taurus ♉'],[60,90,'Gemini ♊'],[90,120,'Cancer ♋'],
+    [120,150,'Leo ♌'],[150,180,'Virgo ♍'],[180,210,'Libra ♎'],[210,240,'Scorpius ♏'],
+    [240,270,'Sagittarius ♐'],[270,300,'Capricorn ♑'],[300,330,'Aquarius ♒'],[330,360,'Pisces ♓']
+  ];
+  let l=norm360(lambda);
+  for(let [s,e,n] of z) if(l>=s&&l<e) return n;
+  return 'Pisces ♓';
+}
+
+// ─── MOONRISE / MOONSET ─── (iterative approach)
+function moonRiseSet(date, lat, lon){
+  const TZ_OFFSET = 8; // UTC+8
+  let rise=null, set_t=null;
+  let prev=null;
+  for(let h=0; h<=24; h+=0.1){
+    let d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()) - TZ_OFFSET*3600000 + h*3600000);
+    let {alt}=moonAltAz(d,lat,lon);
+    if(prev!==null){
+      if(prev<0&&alt>=0 && rise===null) rise=h;
+      if(prev>=0&&alt<0 && set_t===null) set_t=h;
+    }
+    prev=alt;
+  }
+  function hToTime(h){
+    if(h===null) return 'N/A';
+    let hr=Math.floor(h)%24, mn=Math.floor((h%1)*60);
+    return `${String(hr).padStart(2,'0')}:${String(mn).padStart(2,'0')}`;
+  }
+  function hToBest(rise,set_t){
+    if(rise===null&&set_t===null) return null;
+    if(rise!==null&&set_t!==null) return (rise+set_t)/2;
+    return rise||set_t;
+  }
+  return {
+    rise: hToTime(rise), set: hToTime(set_t),
+    riseH: rise, setH: set_t,
+    best: hToBest(rise,set_t)
+  };
+}
+
+// ─── NEXT PHASE DATES ─── (approximate using known 2026 lunations)
+// Lunation data for Oct-Nov 2026 (JD values from Meeus tables)
+const PHASE_EVENTS_2026 = [
+  {date:'2026-09-19', phase:'New Moon',       jd:2461316.0},
+  {date:'2026-09-26', phase:'First Quarter',  jd:2461323.0},
+  {date:'2026-10-03', phase:'Full Moon',       jd:2461330.5},
+  {date:'2026-10-10', phase:'Last Quarter',   jd:2461337.5},
+  {date:'2026-10-18', phase:'New Moon',        jd:2461345.5},
+  {date:'2026-10-25', phase:'First Quarter',  jd:2461352.5},
+  {date:'2026-11-01', phase:'Full Moon',       jd:2461359.5},
+  {date:'2026-11-09', phase:'Last Quarter',   jd:2461367.5},
+  {date:'2026-11-17', phase:'New Moon',        jd:2461375.0},
+  {date:'2026-11-24', phase:'First Quarter',  jd:2461382.5},
+  {date:'2026-12-01', phase:'Full Moon',       jd:2461389.5},
+];
+
+function nextPhaseFromNow(now){
+  let jdNow = JD(now);
+  for(let ev of PHASE_EVENTS_2026){
+    if(ev.jd > jdNow){
+      return ev;
+    }
+  }
+  return PHASE_EVENTS_2026[PHASE_EVENTS_2026.length-1];
+}
+
+function nextFullMoon(now){
+  let jdNow=JD(now);
+  for(let ev of PHASE_EVENTS_2026){
+    if(ev.phase==='Full Moon' && ev.jd>jdNow) return ev;
+  }
+  return null;
+}
+function nextNewMoon(now){
+  let jdNow=JD(now);
+  for(let ev of PHASE_EVENTS_2026){
+    if(ev.phase==='New Moon' && ev.jd>jdNow) return ev;
+  }
+  return null;
+}
+
+function daysHoursUntilJD(jd, now){
+  let jdNow=JD(now);
+  let diff=(jd-jdNow)*24; // hours
+  if(diff<0) return '—';
+  let d=Math.floor(diff/24), h=Math.floor(diff%24);
+  return `${d}d ${h}h`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  APP STATE
+// ═══════════════════════════════════════════════════════════════
+let observer = { lat: 2.4312, lon: 103.8360, tz: 'UTC+8', name: 'Mersing, Johor' };
+let currentMonth = 9; // 0-indexed: 9=Oct
+let currentYear  = 2026;
+let selectedDate = null;
+let moonData     = {};
+let updateTimer  = null;
+
+// ═══════════════════════════════════════════════════════════════
+//  CLOCK
+// ═══════════════════════════════════════════════════════════════
+function updateClock(){
+  let now=new Date();
+  // Display in MYT (UTC+8)
+  let utc=now.getTime()+now.getTimezoneOffset()*60000;
+  let myt=new Date(utc+8*3600000);
+  let H=String(myt.getHours()).padStart(2,'0');
+  let M=String(myt.getMinutes()).padStart(2,'0');
+  let S=String(myt.getSeconds()).padStart(2,'0');
+  document.getElementById('clockTime').textContent=`${H}:${M}:${S}`;
+  const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('clockDate').textContent=`${DAYS[myt.getDay()]}, ${myt.getDate()} ${MONTHS[myt.getMonth()]} ${myt.getFullYear()}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MOON CANVAS DRAWING
+// ═══════════════════════════════════════════════════════════════
+function drawMoon(canvas, illumination, age, size){
+  let ctx=canvas.getContext('2d');
+  let W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  let cx=W/2, cy=H/2, r=(size||W/2)-4;
+
+  // Outer glow
+  let grd=ctx.createRadialGradient(cx,cy,r*0.6,cx,cy,r*1.4);
+  grd.addColorStop(0,'rgba(180,200,255,0.08)');
+  grd.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(cx,cy,r*1.4,0,Math.PI*2); ctx.fill();
+
+  // Determine which side is lit
+  let waxing = age < 14.765;
+  let phase=moonPhase(age);
+
+  // Draw Moon disk
+  // Base shadow
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle='#0a0f1a'; ctx.fill();
+
+  // Moon surface texture (craters via concentric gradients)
+  let surf=ctx.createRadialGradient(cx-r*0.2,cy-r*0.2,r*0.05,cx,cy,r);
+  surf.addColorStop(0,'#d4cfc0');
+  surf.addColorStop(0.3,'#b8b2a0');
+  surf.addColorStop(0.6,'#a09890');
+  surf.addColorStop(0.85,'#888078');
+  surf.addColorStop(1,'#605850');
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle=surf; ctx.fill();
+
+  // Mare (dark patches)
+  let mares=[
+    {x:-0.15,y:-0.2,rx:0.28,ry:0.22},
+    {x:0.18,y:-0.05,rx:0.18,ry:0.15},
+    {x:-0.1,y:0.25,rx:0.22,ry:0.16},
+    {x:0.05,y:0.05,rx:0.12,ry:0.1},
+    {x:-0.32,y:0.1,rx:0.12,ry:0.1},
+  ];
+  mares.forEach(m=>{
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx+m.x*r,cy+m.y*r,m.rx*r,m.ry*r,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(40,35,30,0.45)';
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // Craters
+  let craters=[
+    {x:0.2,y:0.3,r:0.06},{x:-0.25,y:0.35,r:0.04},{x:0.35,y:-0.25,r:0.05},
+    {x:-0.1,y:-0.35,r:0.04},{x:0.1,y:-0.1,r:0.03},{x:-0.35,y:-0.1,r:0.04},
+    {x:0.28,y:0.1,r:0.03},{x:-0.05,y:0.42,r:0.03},
+  ];
+  craters.forEach(c=>{
+    let grc=ctx.createRadialGradient(cx+c.x*r-c.r*r*0.3,cy+c.y*r-c.r*r*0.3,0,cx+c.x*r,cy+c.y*r,c.r*r);
+    grc.addColorStop(0,'rgba(255,255,255,0.12)');
+    grc.addColorStop(0.5,'rgba(0,0,0,0.25)');
+    grc.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(cx+c.x*r,cy+c.y*r,c.r*r,0,Math.PI*2);
+    ctx.fillStyle=grc; ctx.fill();
+  });
+
+  // Shadow overlay based on illumination
+  let illumFrac=illumination/100;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.clip();
+
+  if(illumFrac<=0.01){
+    // New moon — full dark
+    ctx.fillStyle='rgba(5,8,16,0.93)';
+    ctx.fillRect(cx-r,cy-r,2*r,2*r);
+  } else if(illumFrac>=0.99){
+    // Full moon — no shadow
+  } else {
+    // Compute shadow limb
+    // shadow covers the dark portion
+    let x = Math.cos(Math.PI * (1 - 2*(waxing ? illumFrac : 1-illumFrac))) * r;
+    ctx.beginPath();
+    if(waxing){
+      ctx.arc(cx,cy,r,Math.PI/2,3*Math.PI/2,false);
+      ctx.bezierCurveTo(cx+x,cy+r, cx+x,cy-r, cx,cy-r);
+    } else {
+      ctx.arc(cx,cy,r,3*Math.PI/2,Math.PI/2,false);
+      ctx.bezierCurveTo(cx+x,cy-r, cx+x,cy+r, cx,cy+r);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(5,8,16,0.91)';
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Limb highlight
+  let limb=ctx.createRadialGradient(cx,cy,r*0.85,cx,cy,r);
+  limb.addColorStop(0,'rgba(0,0,0,0)');
+  limb.addColorStop(1,'rgba(0,0,0,0.6)');
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle=limb; ctx.fill();
+
+  // Clip to circle
+  ctx.globalCompositeOperation='destination-in';
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle='#fff'; ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  COMPASS CANVAS
+// ═══════════════════════════════════════════════════════════════
+function drawCompass(az){
+  let canvas=document.getElementById('compassCanvas');
+  let ctx=canvas.getContext('2d');
+  let W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  let cx=W/2, cy=H/2, r=W/2-8;
+
+  // Outer ring
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+  let ring=ctx.createLinearGradient(cx-r,cy-r,cx+r,cy+r);
+  ring.addColorStop(0,'#1e2d47'); ring.addColorStop(1,'#263450');
+  ctx.strokeStyle=ring; ctx.lineWidth=3; ctx.stroke();
+  ctx.fillStyle='#0d1321'; ctx.fill();
+
+  // Tick marks
+  for(let i=0;i<360;i+=10){
+    let a=toRad(i-90);
+    let inner=(i%90===0)?r-12:(i%30===0)?r-9:r-6;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(a)*inner, cy+Math.sin(a)*inner);
+    ctx.lineTo(cx+Math.cos(a)*(r-2), cy+Math.sin(a)*(r-2));
+    ctx.strokeStyle=(i%90===0)?'#60a5fa':'#263450';
+    ctx.lineWidth=(i%90===0)?2:1; ctx.stroke();
+  }
+
+  // Cardinal labels
+  const cards=[['N',0,'#ef4444'],['E',90,'#60a5fa'],['S',180,'#e2e8f0'],['W',270,'#60a5fa']];
+  ctx.font='bold 12px system-ui';
+  cards.forEach(([lbl,deg,col])=>{
+    let a=toRad(deg-90);
+    ctx.fillStyle=col;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(lbl, cx+Math.cos(a)*(r-18), cy+Math.sin(a)*(r-18));
+  });
+
+  // Moon needle
+  let azR=toRad(az-90);
+  let needleLen=r-24;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx+Math.cos(azR)*needleLen, cy+Math.sin(azR)*needleLen);
+  ctx.strokeStyle='#fcd34d'; ctx.lineWidth=2.5;
+  ctx.lineCap='round'; ctx.stroke();
+
+  // Moon dot at tip
+  ctx.beginPath();
+  ctx.arc(cx+Math.cos(azR)*needleLen, cy+Math.sin(azR)*needleLen, 5, 0, Math.PI*2);
+  ctx.fillStyle='#fcd34d'; ctx.fill();
+  ctx.fillStyle='#0d1321';
+  ctx.beginPath(); ctx.arc(cx+Math.cos(azR)*needleLen, cy+Math.sin(azR)*needleLen, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Center dot
+  ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2);
+  ctx.fillStyle='#60a5fa'; ctx.fill();
+
+  // Azimuth text
+  ctx.font='bold 14px system-ui';
+  ctx.fillStyle='#fcd34d'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(`${az.toFixed(1)}°`, cx, cy);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SKY MAP
+// ═══════════════════════════════════════════════════════════════
+function drawSkyMap(alt, az, date){
+  let canvas=document.getElementById('skyMapCanvas');
+  let ctx=canvas.getContext('2d');
+  let W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Background gradient
+  let bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#020408');
+  bg.addColorStop(0.7,'#040810');
+  bg.addColorStop(1,'#0a1525');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  // Stars
+  let seed=42;
+  function rng(){ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; }
+  for(let i=0;i<200;i++){
+    let sx=rng()*W, sy=rng()*H*0.75;
+    let br=rng()*0.8+0.2;
+    let sz=rng()*1.5+0.3;
+    ctx.beginPath(); ctx.arc(sx,sy,sz,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${br*0.7})`; ctx.fill();
+  }
+
+  // Horizon line
+  let horizY=H*0.75;
+  ctx.strokeStyle='rgba(59,130,246,0.4)'; ctx.lineWidth=1.5;
+  ctx.setLineDash([6,4]);
+  ctx.beginPath(); ctx.moveTo(0,horizY); ctx.lineTo(W,horizY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(59,130,246,0.12)';
+  ctx.fillRect(0,horizY,W,H-horizY);
+  ctx.font='10px system-ui'; ctx.fillStyle='rgba(59,130,246,0.6)';
+  ctx.textAlign='right';
+  ctx.fillText('HORIZON',W-6,horizY-4);
+
+  // Altitude arc lines
+  [30,60].forEach(a=>{
+    let y=horizY - (a/90)*(horizY-20);
+    ctx.strokeStyle='rgba(100,150,200,0.1)'; ctx.lineWidth=1;
+    ctx.setLineDash([4,6]);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(100,150,200,0.4)';
+    ctx.font='9px system-ui'; ctx.textAlign='left';
+    ctx.fillText(`${a}°`,4,y-3);
+  });
+
+  // Direction labels
+  const dirs=['N','NE','E','SE','S','SW','W','NW','N'];
+  dirs.forEach((d,i)=>{
+    let x=(i/8)*W;
+    ctx.font='10px system-ui'; ctx.fillStyle='rgba(100,150,200,0.5)';
+    ctx.textAlign='center'; ctx.fillText(d,x,H-6);
+    if(i<8){
+      ctx.strokeStyle='rgba(100,150,200,0.1)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,horizY); ctx.lineTo(x,H); ctx.stroke();
+    }
+  });
+
+  // Moon trajectory arc
+  try {
+    ctx.strokeStyle='rgba(252,211,77,0.2)'; ctx.lineWidth=1.5;
+    ctx.setLineDash([3,5]);
+    ctx.beginPath();
+    let first=true;
+    for(let h=0;h<=24;h+=0.5){
+      let d2=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate(),0,0,0)+h*3600000-8*3600000);
+      let {alt:a2,az:az2}=moonAltAz(d2,observer.lat,observer.lon);
+      let px=(az2/360)*W;
+      let py=horizY - Math.min((a2/90)*(horizY-20), horizY-10);
+      if(a2>-20){
+        if(first){ctx.moveTo(px,py);first=false;}
+        else ctx.lineTo(px,py);
+      }
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  } catch(e){}
+
+  // Moon dot
+  if(alt > -5){
+    let mx=(az/360)*W;
+    let my=horizY - (alt/90)*(horizY-20);
+    my=Math.max(16, Math.min(horizY-4, my));
+    // Glow
+    let grd=ctx.createRadialGradient(mx,my,4,mx,my,18);
+    grd.addColorStop(0,'rgba(252,211,77,0.5)');
+    grd.addColorStop(1,'rgba(252,211,77,0)');
+    ctx.beginPath(); ctx.arc(mx,my,18,0,Math.PI*2);
+    ctx.fillStyle=grd; ctx.fill();
+    // Moon
+    ctx.beginPath(); ctx.arc(mx,my,10,0,Math.PI*2);
+    ctx.fillStyle='#fcd34d'; ctx.fill();
+    ctx.font='bold 9px system-ui'; ctx.fillStyle='#000'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('☽',mx,my);
+    // Label
+    ctx.fillStyle='#fcd34d'; ctx.font='bold 11px system-ui'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+    ctx.fillText(`Alt: ${alt.toFixed(1)}°  Az: ${az.toFixed(1)}°`, mx+14, my+4);
+  } else {
+    ctx.fillStyle='rgba(239,68,68,0.6)'; ctx.font='11px system-ui'; ctx.textAlign='center';
+    ctx.fillText('⬇ Moon is below the horizon', W/2, H-16);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HORIZON / ALTITUDE PROFILE
+// ═══════════════════════════════════════════════════════════════
+function drawHorizonChart(date){
+  let canvas=document.getElementById('horizonCanvas');
+  let ctx=canvas.getContext('2d');
+  let W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  let bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#020408'); bg.addColorStop(1,'#0a1525');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  let padL=38, padR=10, padT=14, padB=30;
+  let cW=W-padL-padR, cH=H-padT-padB;
+
+  // Axes
+  ctx.strokeStyle='rgba(100,150,200,0.25)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(padL,padT); ctx.lineTo(padL,padT+cH); ctx.lineTo(padL+cW,padT+cH); ctx.stroke();
+
+  // Grid lines & Y labels
+  [-30,0,30,60,90].forEach(alt=>{
+    let y=padT+cH - ((alt+30)/(90+30))*cH;
+    ctx.strokeStyle= alt===0 ? 'rgba(59,130,246,0.4)' : 'rgba(100,150,200,0.12)';
+    ctx.lineWidth=alt===0?1.5:1;
+    ctx.setLineDash(alt===0?[]:[3,5]);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+cW,y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(150,170,200,0.6)'; ctx.font='9px system-ui'; ctx.textAlign='right';
+    ctx.fillText(`${alt}°`,padL-4,y+3);
+  });
+
+  // X labels (hours)
+  for(let h=0;h<=24;h+=4){
+    let x=padL+(h/24)*cW;
+    ctx.fillStyle='rgba(150,170,200,0.5)'; ctx.font='9px system-ui'; ctx.textAlign='center';
+    ctx.fillText(`${String(h).padStart(2,'0')}:00`,x,padT+cH+14);
+    ctx.strokeStyle='rgba(100,150,200,0.08)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+cH); ctx.stroke();
+  }
+
+  // Altitude curve
+  let points=[];
+  for(let h=0;h<=24;h+=0.25){
+    let d2=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate(),0,0,0)+h*3600000-8*3600000);
+    let {alt}=moonAltAz(d2,observer.lat,observer.lon);
+    let x=padL+(h/24)*cW;
+    let y=padT+cH - ((alt+30)/(120))*cH;
+    points.push({x,y,alt,h});
+  }
+
+  // Fill below horizon
+  ctx.beginPath();
+  let hzY=padT+cH-((0+30)/120)*cH;
+  ctx.moveTo(padL,padT+cH);
+  points.forEach(p=>{ let cy2=Math.max(padT,Math.min(padT+cH,p.y)); ctx.lineTo(p.x,cy2); });
+  ctx.lineTo(padL+cW,padT+cH); ctx.closePath();
+  ctx.fillStyle='rgba(239,68,68,0.06)'; ctx.fill();
+
+  // Fill above horizon
+  ctx.beginPath();
+  ctx.moveTo(padL,hzY);
+  points.forEach(p=>{
+    let y2=Math.max(padT,Math.min(padT+cH,p.y));
+    if(p.alt>=0) ctx.lineTo(p.x,y2);
+    else ctx.lineTo(p.x,hzY);
+  });
+  ctx.lineTo(padL+cW,hzY); ctx.closePath();
+  ctx.fillStyle='rgba(59,130,246,0.08)'; ctx.fill();
+
+  // Curve line
+  ctx.beginPath();
+  points.forEach((p,i)=>{
+    let y2=Math.max(padT,Math.min(padT+cH,p.y));
+    if(i===0) ctx.moveTo(p.x,y2); else ctx.lineTo(p.x,y2);
+  });
+  let grad=ctx.createLinearGradient(padL,0,padL+cW,0);
+  grad.addColorStop(0,'#3b82f6'); grad.addColorStop(0.5,'#60a5fa'); grad.addColorStop(1,'#3b82f6');
+  ctx.strokeStyle=grad; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+
+  // Current time marker
+  let nowD=new Date();
+  let utc2=nowD.getTime()+nowD.getTimezoneOffset()*60000;
+  let myt2=new Date(utc2+8*3600000);
+  // Only draw if same day
+  if(myt2.getFullYear()===date.getFullYear()&&myt2.getMonth()===date.getMonth()&&myt2.getDate()===date.getDate()){
+    let h2=myt2.getHours()+myt2.getMinutes()/60;
+    let x2=padL+(h2/24)*cW;
+    ctx.strokeStyle='rgba(252,211,77,0.7)'; ctx.lineWidth=1.5;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(x2,padT); ctx.lineTo(x2,padT+cH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(252,211,77,0.9)'; ctx.font='9px system-ui'; ctx.textAlign='center';
+    ctx.fillText('NOW',x2,padT-2);
+  }
+
+  // Y axis label
+  ctx.save(); ctx.translate(10,padT+cH/2); ctx.rotate(-Math.PI/2);
+  ctx.fillStyle='rgba(150,170,200,0.5)'; ctx.font='9px system-ui'; ctx.textAlign='center';
+  ctx.fillText('Altitude (°)',0,0); ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PHASE TIMELINE
+// ═══════════════════════════════════════════════════════════════
+function drawPhaseTimeline(year, month){
+  let canvas=document.getElementById('timelineCanvas');
+  let ctx=canvas.getContext('2d');
+  let W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  let bg=ctx.createLinearGradient(0,0,W,0);
+  bg.addColorStop(0,'#0a1020'); bg.addColorStop(1,'#0d1525');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  let days=new Date(year,month+1,0).getDate();
+  let pad=16;
+  let cW=W-pad*2;
+
+  // Day line
+  ctx.strokeStyle='rgba(100,150,200,0.2)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,H/2); ctx.lineTo(W-pad,H/2); ctx.stroke();
+
+  // Phase icons on timeline
+  PHASE_EVENTS_2026.forEach(ev=>{
+    let d=new Date(ev.date+'T00:00:00+08:00');
+    if(d.getFullYear()===year && d.getMonth()===month){
+      let dayN=d.getDate();
+      let x=pad+(dayN-1)/(days-1)*cW;
+      ctx.font='18px system-ui'; ctx.textAlign='center';
+      const icons={
+        'New Moon':'🌑','First Quarter':'🌓',
+        'Full Moon':'🌕','Last Quarter':'🌗'
+      };
+      ctx.fillText(icons[ev.phase]||'🌓',x,H/2+8);
+      ctx.fillStyle='rgba(200,220,255,0.6)'; ctx.font='9px system-ui';
+      ctx.fillText(dayN,x,H*0.85);
+      ctx.fillStyle='rgba(200,220,255,0.4)'; ctx.font='8px system-ui';
+      ctx.fillText(ev.phase.replace(' ','\n').split(' ')[0],x,12);
+    }
+  });
+
+  // Day ticks
+  for(let d=1;d<=days;d++){
+    let x=pad+(d-1)/(days-1)*cW;
+    ctx.strokeStyle='rgba(100,150,200,0.2)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,H/2-3); ctx.lineTo(x,H/2+3); ctx.stroke();
+  }
+
+  // Today marker
+  let now=new Date();
+  let utc=now.getTime()+now.getTimezoneOffset()*60000;
+  let myt=new Date(utc+8*3600000);
+  if(myt.getFullYear()===year&&myt.getMonth()===month){
+    let x=pad+(myt.getDate()-1)/(days-1)*cW;
+    ctx.strokeStyle='rgba(252,211,77,0.6)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(x,H*0.1); ctx.lineTo(x,H*0.9); ctx.stroke();
+    ctx.fillStyle='rgba(252,211,77,0.8)'; ctx.font='8px system-ui'; ctx.textAlign='center';
+    ctx.fillText('TODAY',x,H*0.08);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PRE-COMPUTE MONTHLY DATA
+// ═══════════════════════════════════════════════════════════════
+function computeMonthData(year, month){
+  let days=new Date(year,month+1,0).getDate();
+  let data={};
+  for(let d=1;d<=days;d++){
+    let date=new Date(year,month,d,12,0,0); // noon local
+    let utcDate=new Date(Date.UTC(year,month,d,4,0,0)); // noon MYT = 04:00 UTC
+    let info=moonAltAz(utcDate, observer.lat, observer.lon);
+    let rs=moonRiseSet(new Date(year,month,d), observer.lat, observer.lon);
+    let phase=moonPhase(info.age);
+    let vis=getVisibility(rs.riseH, rs.setH, info.alt);
+    data[d]={
+      date: new Date(year,month,d),
+      alt: info.alt,
+      az: info.az,
+      delta: info.delta,
+      illum: info.illum,
+      age: info.age,
+      phase, rs,
+      visibility: vis,
+      zodiac: zodiacConstellation(info.lambda),
+      bestTime: rs.best ? hFloat2Str(rs.best) : 'N/A',
+      info
+    };
+  }
+  return data;
+}
+
+function hFloat2Str(h){
+  let hr=Math.floor(h)%24, mn=Math.floor((h%1)*60);
+  return `${String(hr).padStart(2,'0')}:${String(mn).padStart(2,'0')}`;
+}
+
+function getVisibility(riseH, setH, altNow){
+  if(riseH===null && setH===null) return {label:'Not Visible', cls:'vis-below'};
+  if(altNow>15) return {label:'Easily Visible', cls:'vis-easy'};
+  if(altNow>0) return {label:'Above Horizon', cls:'vis-above'};
+  if(riseH!==null) return {label:'Difficult to Observe', cls:'vis-difficult'};
+  return {label:'Below Horizon', cls:'vis-below'};
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CALENDAR RENDERING
+// ═══════════════════════════════════════════════════════════════
+const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function renderCalendar(){
+  let grid=document.getElementById('calGrid');
+  document.getElementById('calMonthTitle').textContent=`${MONTH_NAMES[currentMonth]} ${currentYear}`;
+  grid.innerHTML='';
+
+  // Day headers
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d=>{
+    let h=document.createElement('div');
+    h.className='cal-header'; h.textContent=d;
+    grid.appendChild(h);
+  });
+
+  let firstDay=new Date(currentYear,currentMonth,1).getDay();
+  let days=new Date(currentYear,currentMonth+1,0).getDate();
+  let now=new Date();
+  let utc=now.getTime()+now.getTimezoneOffset()*60000;
+  let myt=new Date(utc+8*3600000);
+
+  // Empty cells
+  for(let i=0;i<firstDay;i++){
+    let e=document.createElement('div');
+    e.className='cal-day empty'; grid.appendChild(e);
+  }
+
+  // Day cells
+  let data=moonData[`${currentYear}-${currentMonth}`];
+  if(!data) data=computeMonthData(currentYear,currentMonth);
+  moonData[`${currentYear}-${currentMonth}`]=data;
+
+  for(let d=1;d<=days;d++){
+    let cell=document.createElement('div');
+    cell.className='cal-day';
+    let dd=data[d];
+    let isToday=(myt.getFullYear()===currentYear&&myt.getMonth()===currentMonth&&myt.getDate()===d);
+    if(isToday) cell.classList.add('today');
+    if(selectedDate&&selectedDate.d===d&&selectedDate.m===currentMonth&&selectedDate.y===currentYear)
+      cell.classList.add('selected');
+
+    // Vis dot
+    let dot=document.createElement('div');
+    dot.className='cal-vis-dot';
+    const visColors={'Easily Visible':'#10b981','Above Horizon':'#3b82f6','Difficult to Observe':'#f59e0b','Below Horizon':'#6b7280','Not Visible':'#374151'};
+    dot.style.background=visColors[dd.visibility.label]||'#6b7280';
+    cell.appendChild(dot);
+
+    // Day number
+    let num=document.createElement('div');
+    num.className='cal-day-num'; num.textContent=d;
+    cell.appendChild(num);
+
+    // Phase icon
+    let icon=document.createElement('div');
+    icon.className='cal-phase-icon'; icon.textContent=dd.phase.icon;
+    cell.appendChild(icon);
+
+    // Illumination
+    let illum=document.createElement('div');
+    illum.className='cal-illum'; illum.textContent=`${dd.illum.toFixed(0)}%`;
+    cell.appendChild(illum);
+
+    cell.onclick=()=>selectDate(d, currentMonth, currentYear, dd);
+    grid.appendChild(cell);
+  }
+
+  drawPhaseTimeline(currentYear, currentMonth);
+  // Enable/disable nav buttons
+  document.getElementById('btnPrevMonth').disabled=(currentYear===2026&&currentMonth===9);
+  document.getElementById('btnNextMonth').disabled=(currentYear===2026&&currentMonth===10);
+}
+
+function changeMonth(dir){
+  let mo=currentMonth+dir;
+  if(mo<9||mo>10) return;
+  currentMonth=mo;
+  selectedDate=null;
+  document.getElementById('detailPanel').classList.remove('open');
+  renderCalendar();
+  drawHorizonChart(new Date(currentYear,currentMonth,1));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DATE DETAIL PANEL
+// ═══════════════════════════════════════════════════════════════
+function selectDate(d, m, y, dd){
+  selectedDate={d,m,y};
+
+  // Re-render to show selection
+  renderCalendar();
+
+  let panel=document.getElementById('detailPanel');
+  panel.classList.add('open');
+  let MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('detailTitle').textContent=
+    `📅 ${MONTHS[m]} ${d}, ${y}  —  ${dd.phase.name}`;
+
+  // Moon canvas
+  let dc=document.getElementById('detailMoonCanvas');
+  drawMoon(dc, dd.illum, dd.age, 46);
+
+  // Info grid
+  let grid=document.getElementById('detailInfoGrid');
+  let items=[
+    ['Phase',dd.phase.icon+' '+dd.phase.name],
+    ['Illumination',`${dd.illum.toFixed(1)}%`],
+    ['Moonrise',dd.rs.rise],
+    ['Moonset',dd.rs.set],
+    ['Azimuth (noon)',`${dd.az.toFixed(1)}°`],
+    ['Altitude (noon)',`${dd.alt.toFixed(1)}°`],
+    ['Distance',`${Math.round(dd.delta).toLocaleString()} km`],
+    ['Moon Age',`${dd.age.toFixed(1)} days`],
+    ['Zodiac',dd.zodiac],
+    ['Visibility',dd.visibility.label],
+    ['Best Time',dd.bestTime],
+  ];
+  grid.innerHTML=items.map(([l,v])=>`
+    <div class="detail-stat">
+      <div class="lbl">${l}</div>
+      <div class="val">${v}</div>
+    </div>`).join('');
+
+  // Notes
+  let notes=generateAstroNotes(dd, d, m, y);
+  document.getElementById('detailNotes').innerHTML=notes;
+
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function generateAstroNotes(dd, d, m, y){
+  let notes=[];
+  // Phase notes
+  if(dd.phase.val===4) notes.push('🌕 <b>Full Moon night</b> — Maximum illumination, ideal for naked-eye lunar observation. Moon rises near sunset and sets near sunrise.');
+  if(dd.phase.val===0) notes.push('🌑 <b>New Moon</b> — Moon not visible; ideal for deep-sky observation with minimal light pollution.');
+  if(dd.phase.val===2||dd.phase.val===6) notes.push('🌓 <b>Quarter Moon</b> — Terminator region offers dramatic views of lunar craters and mountain ranges.');
+  if(dd.illum>75) notes.push('💡 High illumination may interfere with faint deep-sky objects tonight.');
+  if(dd.rs.riseH!==null&&dd.rs.setH!==null){
+    let dur=(dd.rs.setH-dd.rs.riseH+24)%24;
+    notes.push(`⏱ Moon is above the horizon for approximately <b>${dur.toFixed(1)} hours</b> today.`);
+  }
+  // Distance
+  if(dd.delta<363300) notes.push(`🔭 <b>Supermoon region</b> — Moon is ${Math.round(363300-dd.delta).toLocaleString()} km closer than average perigee.`);
+  if(dd.delta>405500) notes.push(`🔭 <b>Micromoon region</b> — Moon appears slightly smaller than average at this apogee distance.`);
+  // Mersing context
+  notes.push(`📍 Observed from <b>Mersing, Johor</b> (2.4312°N, 103.8360°E, UTC+8). Mersing has excellent coastal viewing conditions with low light pollution.`);
+  return notes.map(n=>`<div style="margin-bottom:4px">${n}</div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN UPDATE LOOP
+// ═══════════════════════════════════════════════════════════════
+function update(){
+  let now=new Date();
+  // MYT now
+  let utcMs=now.getTime()+now.getTimezoneOffset()*60000;
+  let mytNow=new Date(utcMs+8*3600000);
+  // UTC equivalent of MYT now
+  let utcNow=new Date(utcMs);
+
+  let info=moonAltAz(utcNow, observer.lat, observer.lon);
+  let rs=moonRiseSet(mytNow, observer.lat, observer.lon);
+  let phase=moonPhase(info.age);
+  let vis=getVisibility(rs.riseH, rs.setH, info.alt);
+
+  // Moon canvas
+  let mc=document.getElementById('moonCanvas');
+  drawMoon(mc, info.illum, info.age, 86);
+
+  // Phase
+  document.getElementById('phaseName').textContent=phase.icon+' '+phase.name;
+  document.getElementById('phaseIllum').textContent=`Illumination: ${info.illum.toFixed(1)}%`;
+  document.getElementById('zodiacTag').textContent=zodiacConstellation(info.lambda);
+
+  // Altitude bar
+  let altPct=Math.max(0,Math.min(100,(info.alt+10)/100*100));
+  document.getElementById('altBarFill').style.width=altPct+'%';
+  document.getElementById('altBarFill').style.background=info.alt>0?'#10b981':'#ef4444';
+  document.getElementById('altBarLabel').textContent=`${info.alt.toFixed(1)}°`;
+
+  // Visibility badge
+  let vb=document.getElementById('visibilityBadge');
+  vb.textContent=vis.label;
+  vb.className='visibility-badge '+vis.cls;
+
+  // Stats
+  document.getElementById('statAz').innerHTML=`${info.az.toFixed(1)}<span class="stat-unit">°</span>`;
+  document.getElementById('statAlt').innerHTML=`${info.alt.toFixed(1)}<span class="stat-unit">°</span>`;
+  document.getElementById('statRise').textContent=rs.rise;
+  document.getElementById('statSet').textContent=rs.set;
+  document.getElementById('statDist').innerHTML=`${Math.round(info.delta).toLocaleString()} <span class="stat-unit">km</span>`;
+  document.getElementById('statAge').innerHTML=`${info.age.toFixed(1)} <span class="stat-unit">days</span>`;
+
+  // Compass
+  drawCompass(info.az);
+
+  // Next phase & countdowns
+  let np=nextPhaseFromNow(utcNow);
+  document.getElementById('nextPhaseName').textContent=np?np.phase:'—';
+  document.getElementById('nextPhaseDate').textContent=np?np.date:'—';
+
+  let nfull=nextFullMoon(utcNow);
+  let nnew=nextNewMoon(utcNow);
+  document.getElementById('cdFull').textContent=nfull?daysHoursUntilJD(nfull.jd,utcNow):'—';
+  document.getElementById('cdNew').textContent=nnew?daysHoursUntilJD(nnew.jd,utcNow):'—';
+
+  // Sky map
+  drawSkyMap(info.alt, info.az, utcNow);
+
+  // Horizon chart (current day)
+  drawHorizonChart(mytNow);
+
+  // Best time
+  updateBestTime(rs, vis, mytNow);
+
+  updateClock();
+}
+
+function updateBestTime(rs, vis, mytNow){
+  let title=document.getElementById('bestTimeTitle');
+  let sub=document.getElementById('bestTimeSub');
+  if(rs.riseH===null){
+    title.textContent='Moon Not Visible Tonight';
+    sub.textContent='The Moon does not rise above the horizon today from Mersing.';
+    return;
+  }
+  if(rs.best!==null){
+    let best=hFloat2Str(rs.best);
+    let dur=rs.setH&&rs.riseH?((rs.setH-rs.riseH+24)%24).toFixed(1):null;
+    title.textContent=`Best Observation Window: ${rs.rise} – ${rs.set}`;
+    sub.textContent=`Peak altitude near ${best}${dur?` · ${dur}h above horizon`:''}. ${vis.label} from Mersing, Johor.`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOCATION
+// ═══════════════════════════════════════════════════════════════
+function onLocationChange(){
+  let sel=document.getElementById('locationSelect').value;
+  if(sel==='mersing'){
+    observer={lat:2.4312, lon:103.8360, tz:'UTC+8', name:'Mersing, Johor'};
+    document.getElementById('coordsDisplay').textContent='2.4312°N · 103.8360°E · UTC+8';
+    moonData={};
+    update(); renderCalendar();
+  } else {
+    getGPS();
+  }
+}
+
+function getGPS(){
+  if(!navigator.geolocation){
+    alert('Geolocation is not supported by this browser.');
+    return;
+  }
+  document.getElementById('coordsDisplay').innerHTML='<span class="spinner"></span> Getting location...';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    observer.lat=pos.coords.latitude;
+    observer.lon=pos.coords.longitude;
+    observer.name='Current Location';
+    document.getElementById('coordsDisplay').textContent=
+      `${observer.lat.toFixed(4)}°N · ${observer.lon.toFixed(4)}°E · UTC+8`;
+    document.getElementById('locationSelect').value='gps';
+    moonData={};
+    update(); renderCalendar();
+  }, err=>{
+    document.getElementById('coordsDisplay').textContent='GPS unavailable — using Mersing';
+    document.getElementById('locationSelect').value='mersing';
+    observer={lat:2.4312, lon:103.8360, tz:'UTC+8', name:'Mersing, Johor'};
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  EXPORT
+// ═══════════════════════════════════════════════════════════════
+function exportCSV(){
+  let data=moonData[`${currentYear}-${currentMonth}`];
+  if(!data) data=computeMonthData(currentYear,currentMonth);
+  let rows=['Date,Phase,Illumination%,Moonrise,Moonset,Altitude(°),Azimuth(°),Distance(km),Visibility,Best Time'];
+  let days=new Date(currentYear,currentMonth+1,0).getDate();
+  for(let d=1;d<=days;d++){
+    let dd=data[d];
+    let mn=String(currentMonth+1).padStart(2,'0'), ds=String(d).padStart(2,'0');
+    rows.push([
+      `${currentYear}-${mn}-${ds}`,
+      dd.phase.name,
+      dd.illum.toFixed(1),
+      dd.rs.rise,
+      dd.rs.set,
+      dd.alt.toFixed(1),
+      dd.az.toFixed(1),
+      Math.round(dd.delta),
+      dd.visibility.label,
+      dd.bestTime
+    ].join(','));
+  }
+  let blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  let a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`moon_tracker_${MONTH_NAMES[currentMonth]}_${currentYear}.csv`;
+  a.click();
+}
+
+function exportPDF(){
+  // Use print dialog with styled content
+  let data=moonData[`${currentYear}-${currentMonth}`];
+  if(!data) data=computeMonthData(currentYear,currentMonth);
+  let days=new Date(currentYear,currentMonth+1,0).getDate();
+  let rows='';
+  for(let d=1;d<=days;d++){
+    let dd=data[d];
+    let mn=String(currentMonth+1).padStart(2,'0'), ds=String(d).padStart(2,'0');
+    rows+=`<tr>
+      <td>${currentYear}-${mn}-${ds}</td>
+      <td>${dd.phase.icon} ${dd.phase.name}</td>
+      <td>${dd.illum.toFixed(1)}%</td>
+      <td>${dd.rs.rise}</td>
+      <td>${dd.rs.set}</td>
+      <td>${dd.alt.toFixed(1)}°</td>
+      <td>${dd.az.toFixed(1)}°</td>
+      <td>${Math.round(dd.delta).toLocaleString()} km</td>
+      <td>${dd.visibility.label}</td>
+    </tr>`;
+  }
+  let win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Moon Tracker — ${MONTH_NAMES[currentMonth]} ${currentYear}</title>
+  <style>body{font-family:system-ui;font-size:11px;color:#111}h1{font-size:16px}table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #ccc;padding:4px 6px}th{background:#eee}tr:nth-child(even){background:#f9f9f9}</style>
+  </head><body>
+  <h1>🌙 Moon Tracking System — ${MONTH_NAMES[currentMonth]} ${currentYear}</h1>
+  <p>Location: ${observer.name} (${observer.lat}°N, ${observer.lon}°E)</p>
+  <table><thead><tr>
+    <th>Date</th><th>Phase</th><th>Illum</th><th>Moonrise</th><th>Moonset</th>
+    <th>Altitude</th><th>Azimuth</th><th>Distance</th><th>Visibility</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  <p style="margin-top:12px;color:#999;font-size:10px">Generated by Moon Tracking System · Mersing, Johor, Malaysia</p>
+  </body></html>`);
+  win.document.close();
+  win.print();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  STARFIELD
+// ═══════════════════════════════════════════════════════════════
+function initStarfield(){
+  let canvas=document.getElementById('starfield');
+  let ctx=canvas.getContext('2d');
+  function resize(){
+    canvas.width=window.innerWidth;
+    canvas.height=window.innerHeight;
+    drawStars();
+  }
+  function drawStars(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    let seed=7919;
+    function rr(){ seed=(seed*1103515245+12345)&0x7fffffff; return (seed>>>0)/0x7fffffff; }
+    for(let i=0;i<400;i++){
+      let x=rr()*canvas.width, y=rr()*canvas.height;
+      let sz=rr()*1.8+0.2, br=rr()*0.5+0.1;
+      ctx.beginPath(); ctx.arc(x,y,sz,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,255,255,${br})`; ctx.fill();
+    }
+  }
+  resize();
+  window.addEventListener('resize',()=>{
+    resize();
+    // Re-render canvases on resize
+    let now=new Date();
+    let utcMs=now.getTime()+now.getTimezoneOffset()*60000;
+    let mytNow=new Date(utcMs+8*3600000);
+    drawHorizonChart(mytNow);
+    drawPhaseTimeline(currentYear,currentMonth);
+  });
+}
+
+// ─── CANVAS RESIZE HELPER ───
+function resizeCanvases(){
+  ['skyMapCanvas','horizonCanvas','timelineCanvas'].forEach(id=>{
+    let canvas=document.getElementById(id);
+    let rect=canvas.parentElement.getBoundingClientRect();
+    let w=Math.floor(rect.width-36);
+    if(w>0) canvas.width=w;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  initStarfield();
+  resizeCanvases();
+  // Pre-compute both months
+  moonData['2026-9']=computeMonthData(2026,9);
+  moonData['2026-10']=computeMonthData(2026,10);
+  update();
+  renderCalendar();
+  // Auto-update every 60s
+  setInterval(update,60000);
+  setInterval(updateClock,1000);
+});
+
+window.addEventListener('resize',()=>{
+  setTimeout(()=>{ resizeCanvases(); update(); },100);
+});
+</script>
+</body>
+</html>
